@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask CRUD App</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #item-form label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        #item-form input[type="text"] {
+            width: calc(100% - 22px); /* Adjust for padding */
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        #item-form button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        #save-button {
+            background-color: #5cb85c;
+            color: white;
+        }
+        #update-button {
+            background-color: #f0ad4e;
+            color: white;
+        }
+        #cancel-button {
+            background-color: #aaa;
+            color: white;
+        }
+        #item-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+        }
+        #item-list li {
+            background: #eee;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #item-list li span {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        #item-list button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+        .edit-btn {
+            background-color: #337ab7;
+            color: white;
+        }
+        .delete-btn {
+            background-color: #d9534f;
+            color: white;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Simple CRUD App</h1>
+
+        <!-- Form for Adding/Editing Items -->
+        <form id="item-form">
+            <h2>Manage Item</h2>
+            <input type="hidden" id="item-id"> <!-- Hidden field to store ID when editing -->
+            <div>
+                <label for="item-name">Item Name:</label>
+                <input type="text" id="item-name" required placeholder="Enter item name...">
+            </div>
+            <div>
+                <button type="submit" id="save-button">Save Item</button>
+                <button type="button" id="update-button" class="hidden">Update Item</button>
+                <button type="button" id="cancel-button" class="hidden">Cancel</button>
+            </div>
+        </form>
+
+        <!-- List to Display Items -->
+        <h2>Items List</h2>
+        <ul id="item-list">
+            <!-- Items will be loaded here by JavaScript -->
+            <li>Loading...</li>
+        </ul>
+    </div>
+
+    <script>
+        const apiUrl = '/api/items'; // Relative URL since frontend is served by Flask
+
+        // DOM Elements
+        const itemList = document.getElementById('item-list');
+        const itemForm = document.getElementById('item-form');
+        const itemIdInput = document.getElementById('item-id');
+        const itemNameInput = document.getElementById('item-name');
+        const saveButton = document.getElementById('save-button');
+        const updateButton = document.getElementById('update-button');
+        const cancelButton = document.getElementById('cancel-button');
+
+        // --- Functions ---
+
+        // Fetch all items from API and display them
+        async function fetchItems() {
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const items = await response.json();
+                displayItems(items);
+            } catch (error) {
+                console.error('Error fetching items:', error);
+                itemList.innerHTML = '<li>Error loading items.</li>';
+            }
+        }
+
+        // Display items in the list
+        function displayItems(items) {
+            itemList.innerHTML = ''; // Clear current list
+            if (items.length === 0) {
+                itemList.innerHTML = '<li>No items found.</li>';
+                return;
+            }
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.dataset.id = item.id; // Store id on the element
+                li.innerHTML = `
+                    <span>${escapeHTML(item.name)} (ID: ${item.id})</span>
+                    <div>
+                        <button class="edit-btn">Edit</button>
+                        <button class="delete-btn">Delete</button>
+                    </div>
+                `;
+                itemList.appendChild(li);
+            });
+        }
+
+        // Add a new item
+        async function addItem(name) {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+                if (!response.ok) {
+                     const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.description || 'Failed to add item'}`);
+                }
+                await response.json(); // Get the created item back (optional)
+                fetchItems(); // Refresh the list
+                resetForm();
+            } catch (error) {
+                console.error('Error adding item:', error);
+                alert(`Failed to add item: ${error.message}`);
+            }
+        }
+
+        // Delete an item
+        async function deleteItem(id) {
+            if (!confirm(`Are you sure you want to delete item ID ${id}?`)) {
+                return;
+            }
+            try {
+                const response = await fetch(`${apiUrl}/${id}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.description || 'Failed to delete item'}`);
+                }
+                await response.json(); // Get confirmation message (optional)
+                fetchItems(); // Refresh the list
+            } catch (error) {
+                console.error('Error deleting item:', error);
+                 alert(`Failed to delete item: ${error.message}`);
+            }
+        }
+
+         // Prepare form for editing
+        function editItem(id, name) {
+            itemIdInput.value = id;
+            itemNameInput.value = name;
+            saveButton.classList.add('hidden');
+            updateButton.classList.remove('hidden');
+            cancelButton.classList.remove('hidden');
+            itemNameInput.focus(); // Focus the input field
+        }
+
+        // Update an existing item
+        async function updateItem(id, name) {
+             try {
+                const response = await fetch(`${apiUrl}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.description || 'Failed to update item'}`);
+                }
+                await response.json(); // Get updated item (optional)
+                fetchItems(); // Refresh the list
+                resetForm();
+            } catch (error) {
+                console.error('Error updating item:', error);
+                 alert(`Failed to update item: ${error.message}`);
+            }
+        }
+
+        // Reset form to default (add) state
+        function resetForm() {
+            itemForm.reset(); // Clears input fields
+            itemIdInput.value = ''; // Clear hidden ID field
+            saveButton.classList.remove('hidden');
+            updateButton.classList.add('hidden');
+            cancelButton.classList.add('hidden');
+        }
+
+        // Simple HTML escaping function
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+
+
+        // --- Event Listeners ---
+
+        // Handle form submission (for adding new items)
+        itemForm.addEventListener('submit', (e) => {
+            e.preventDefault(); // Prevent default form submission
+            // Only trigger add if save button is visible (not in edit mode)
+            if (!saveButton.classList.contains('hidden')) {
+                const name = itemNameInput.value.trim();
+                if (name) {
+                    addItem(name);
+                } else {
+                    alert("Item name cannot be empty.");
+                }
+            }
+        });
+
+        // Handle clicks on the item list (for Edit/Delete buttons)
+        itemList.addEventListener('click', (e) => {
+            const target = e.target;
+            const li = target.closest('li'); // Find the parent list item
+            if (!li) return; // Exit if click wasn't inside a list item
+
+            const id = li.dataset.id;
+
+            if (target.classList.contains('delete-btn')) {
+                deleteItem(id);
+            } else if (target.classList.contains('edit-btn')) {
+                const name = li.querySelector('span').textContent.split(' (ID:')[0]; // Extract name
+                editItem(id, name);
+            }
+        });
+
+         // Handle Update button click
+        updateButton.addEventListener('click', () => {
+            const id = itemIdInput.value;
+            const name = itemNameInput.value.trim();
+             if (id && name) {
+                updateItem(id, name);
+            } else {
+                 alert("Item name cannot be empty when updating.");
+            }
+        });
+
+        // Handle Cancel button click
+        cancelButton.addEventListener('click', () => {
+            resetForm();
+        });
+
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', fetchItems);
+
+    </script>
+</body>
+</html>
